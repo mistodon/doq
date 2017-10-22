@@ -1,11 +1,14 @@
 [package]
+authors = ["Pirh <***redacted.email@redacted.nope***>"]
 name = "clockq"
 version = "0.1.0"
-authors = ["Pirh <***redacted.email@redacted.nope***>"]
-
 [dependencies]
 chrono = "0.4"
 clap = "2.26"
 serde = "1.0"
 serde_derive = "1.0"
 serde_yaml = "0.7"
+
+[dependencies.close_enough]
+default-features = false
+version = "0.2"

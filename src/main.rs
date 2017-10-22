@@ -1,5 +1,6 @@
 extern crate chrono;
 extern crate clap;
+extern crate close_enough;
 extern crate serde;
 
 #[macro_use]
@@ -216,7 +217,8 @@ fn main()
             };
 
             {
-                let mut task = schedule.tasks.iter_mut().find(|t| t.name == name).or_fail("No task with that name");
+                let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
+                let mut task = schedule.tasks.iter_mut().find(|t| t.name == task_name).or_fail("No task with that name");
                 task.set_last_completed(date);
             }
             write_file(schedule_file, &schedule);
