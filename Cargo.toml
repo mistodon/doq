@@ -6,6 +6,7 @@ description = "A tool for tracking tasks which need done regularly."
 homepage = "https://github.com/Pirh/doq"
 repository = "https://github.com/Pirh/doq"
 readme = "README.md"
+license = "WTFPL"
 
 [dependencies]
 ansi_term = "0.10"
