@@ -1,7 +1,11 @@
 [package]
 authors = ["Pirh <***redacted.email@redacted.nope***>"]
-name = "clockq"
+name = "doq"
 version = "0.1.0"
+description = "A tool for tracking tasks which need done regularly."
+homepage = "https://github.com/Pirh/doq"
+repository = "https://github.com/Pirh/doq"
+readme = "README.md"
 
 [dependencies]
 ansi_term = "0.10"

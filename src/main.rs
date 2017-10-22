@@ -18,7 +18,7 @@ use serde::{ Serialize, Deserialize };
 
 fn fail(message: &str) -> !
 {
-    eprintln!("clockq: error: {}", message);
+    eprintln!("doq: error: {}", message);
     std::process::exit(1);
 }
 
@@ -126,12 +126,12 @@ fn main()
 {
     use clap::{App, SubCommand, Arg};
 
-    let app = App::new("clockq")
+    let app = App::new("doq")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Tool for tracking tasks which need done regularly.")
         .arg(
             Arg::with_name("file")
-                .help("The schedule file to read and write from. Defaults to the file specified in ~/.clockq")
+                .help("The schedule file to read and write from. Defaults to the file specified in ~/.doq")
                 .long("file")
                 .short("f")
                 .takes_value(true)
@@ -199,8 +199,8 @@ fn main()
             Some(file) => PathBuf::from(file),
             None => {
                 let home = std::env::home_dir().or_fail("Failed to find home directory");
-                let dotfile_path: PathBuf = [home.as_path(), ".clockq".as_ref()].iter().collect();
-                let default_schedule_path: PathBuf = [home.as_path(), ".clockq_schedule".as_ref()].iter().collect();
+                let dotfile_path: PathBuf = [home.as_path(), ".doq".as_ref()].iter().collect();
+                let default_schedule_path: PathBuf = [home.as_path(), ".doq_schedule".as_ref()].iter().collect();
 
                 ensure_file_exists(&dotfile_path, &AppConfig { schedule_file: default_schedule_path });
                 let config: AppConfig = read_file(&dotfile_path);

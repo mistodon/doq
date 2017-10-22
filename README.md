@@ -1,4 +1,4 @@
-ClockQ (or something?)
+DoQ (or something?)
 ===
 
 A tool for tracking tasks that need to be done regularly.
@@ -7,7 +7,7 @@ Usage
 ---
 
 ```
-$ clockq add "water plants" --frequency 7
+$ doq add "water plants" --frequency 7
 
 Task                 Last completed
 ===                  ===
@@ -15,7 +15,7 @@ water plants         Never
 ```
 
 ```
-$ clockq add "tidy house" --frequency 7 --done
+$ doq add "tidy house" --frequency 7 --done
 
 Task                 Last completed
 ===                  ===
@@ -24,7 +24,7 @@ tidy house           2017-10-22           Today        (Due in 7 days)
 ```
 
 ```
-$ clockq did plants
+$ doq did plants
 
 Mark task 'water plants' as done on 2017-10-22? (y/N)
 y
@@ -35,7 +35,7 @@ tidy house           2017-10-22           Today        (Due in 7 days)
 ```
 
 ```
-$ clockq did house --on 2017-01-01 -y
+$ doq did house --on 2017-01-01 -y
 
 Task                 Last completed
 ===                  ===
