@@ -174,6 +174,11 @@ fn main()
                         .long("on")
                         .takes_value(true)
                     )
+                .arg(
+                    Arg::with_name("yes")
+                        .help("Bypass confirmation prompt")
+                        .short("y")
+                    )
             );
 
     let matches = app.get_matches();
@@ -228,13 +233,42 @@ fn main()
                 Some(date) => NaiveDate::from_str(date).or_fail("Invalid date format"),
                 None => Utc::today().naive_utc()
             };
+            let yes = matches.is_present("yes");
 
-            {
+            let should_write = {
                 let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
                 let mut task = schedule.tasks.iter_mut().find(|t| t.name == task_name).unwrap();
-                task.set_last_completed(date);
+
+                let proceed = match yes
+                {
+                    true => true,
+                    false =>
+                    {
+                        println!("Mark task '{}' as done on {}? (y/N) ", task.name, date);
+                        let mut buffer = String::new();
+                        std::io::stdin().read_line(&mut buffer).or_fail("Failed to read from stdin");
+
+                        let command = buffer.trim().to_lowercase();
+                        (command == "y" || command == "yes")
+                    }
+                };
+          
+                if proceed
+                {
+                    task.set_last_completed(date);
+                    true
+                }
+                else
+                {
+                    eprintln!("Cancelling");
+                    false
+                }
+            };
+
+            if should_write
+            {
+                write_file(schedule_file, &schedule);
             }
-            write_file(schedule_file, &schedule);
         }
 
         _ =>
