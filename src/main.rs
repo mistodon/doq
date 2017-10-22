@@ -9,6 +9,7 @@ extern crate serde_yaml;
 
 
 use std::path::{ Path, PathBuf };
+use chrono::{ Utc, NaiveDate };
 use serde::{ Serialize, Deserialize };
 
 
@@ -56,7 +57,34 @@ struct Schedule
 #[derive(Debug, Serialize, Deserialize)]
 struct Task
 {
-    pub name: String
+    pub name: String,
+    last_completed: Option<String>
+}
+
+impl Task
+{
+    pub fn new(name: &str, last_completed: Option<NaiveDate>) -> Self
+    {
+        let mut task = Task { name: name.to_owned(), last_completed: None };
+        if let Some(date) = last_completed
+        {
+            task.set_last_completed(date);
+        }
+        task
+    }
+
+    pub fn set_last_completed(&mut self, date: NaiveDate)
+    {
+        let datestring = format!("{}", date);
+        self.last_completed = Some(datestring);
+    }
+
+    pub fn last_completed(&self) -> Option<NaiveDate>
+    {
+        use std::str::FromStr;
+
+        self.last_completed.as_ref().map(|s| NaiveDate::from_str(s).or_fail("Failed to parse date"))
+    }
 }
 
 
@@ -113,6 +141,11 @@ fn main()
                         .takes_value(true)
                         .required(true)
                     )
+                .arg(
+                    Arg::with_name("done")
+                        .help("Set if the task was done today")
+                        .long("done")
+                    )
             );
 
     let matches = app.get_matches();
@@ -143,20 +176,34 @@ fn main()
         ("add", Some(matches)) =>
         {
             let name = matches.value_of("name").unwrap();
+            let done = matches.is_present("done");
+
             if schedule.tasks.iter().find(|t| t.name == name).is_some()
             {
                 fail("Task already exists");
             }
-            schedule.tasks.push(Task { name: name.to_owned() });
+
+            let date = if done { Some(Utc::today().naive_utc()) } else { None };
+
+            schedule.tasks.push(Task::new(name, date));
             write_file(schedule_file, &schedule);
         },
         _ =>
         {
-            println!("Tasks");
-            println!("===");
+            println!("{: <20} {: <16}", "Task", "Last completed");
+            println!("{: <20} {: <16}", "===", "===");
             for task in schedule.tasks.iter()
             {
-                println!("{}", task.name);
+                let (datestring, days_ago_text) = match task.last_completed()
+                {
+                    Some(date) =>
+                    {
+                        let days = date.signed_duration_since(Utc::today().naive_utc()).num_days();
+                        (date.to_string(), format!("{} days ago", days))
+                    }
+                    None => ("Never".to_owned(), "".to_owned())
+                };
+                println!("{: <20} {: <16} {}", task.name, datestring, days_ago_text);
             }
         }
     }
