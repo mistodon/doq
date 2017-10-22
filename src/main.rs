@@ -59,14 +59,15 @@ struct Schedule
 struct Task
 {
     pub name: String,
+    pub frequency_days: u64,
     last_completed: Option<String>
 }
 
 impl Task
 {
-    pub fn new(name: &str, last_completed: Option<NaiveDate>) -> Self
+    pub fn new(name: &str, frequency_days: u64, last_completed: Option<NaiveDate>) -> Self
     {
-        let mut task = Task { name: name.to_owned(), last_completed: None };
+        let mut task = Task { name: name.to_owned(), frequency_days, last_completed: None };
         if let Some(date) = last_completed
         {
             task.set_last_completed(date);
@@ -143,6 +144,14 @@ fn main()
                         .required(true)
                     )
                 .arg(
+                    Arg::with_name("frequency")
+                        .help("How frequently this task should be done in days")
+                        .short("f")
+                        .long("frequency")
+                        .takes_value(true)
+                        .required(true)
+                    )
+                .arg(
                     Arg::with_name("done")
                         .help("Set if the task was done today")
                         .long("done")
@@ -193,6 +202,7 @@ fn main()
         ("add", Some(matches)) =>
         {
             let name = matches.value_of("name").unwrap();
+            let freq: u64 = matches.value_of("frequency").unwrap().parse().or_fail("Frequency must be a number of days");
             let done = matches.is_present("done");
 
             if schedule.tasks.iter().find(|t| t.name == name).is_some()
@@ -202,9 +212,10 @@ fn main()
 
             let date = if done { Some(Utc::today().naive_utc()) } else { None };
 
-            schedule.tasks.push(Task::new(name, date));
+            schedule.tasks.push(Task::new(name, freq, date));
             write_file(schedule_file, &schedule);
         },
+
         ("did", Some(matches)) =>
         {
             use std::str::FromStr;
@@ -218,27 +229,41 @@ fn main()
 
             {
                 let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
-                let mut task = schedule.tasks.iter_mut().find(|t| t.name == task_name).or_fail("No task with that name");
+                let mut task = schedule.tasks.iter_mut().find(|t| t.name == task_name).unwrap();
                 task.set_last_completed(date);
             }
             write_file(schedule_file, &schedule);
         }
+
         _ =>
         {
             println!("{: <20} {: <16}", "Task", "Last completed");
             println!("{: <20} {: <16}", "===", "===");
             for task in schedule.tasks.iter()
             {
-                let (datestring, days_ago_text) = match task.last_completed()
+                match task.last_completed()
                 {
                     Some(date) =>
                     {
                         let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
-                        (date.to_string(), format!("{: >3} days ago", days))
-                    }
-                    None => ("Never".to_owned(), "".to_owned())
-                };
-                println!("{: <20} {: <16} {}", task.name, datestring, days_ago_text);
+                        let datestring = date.to_string();
+                        let days_ago_text = match days
+                        {
+                            0 => "    Today".to_owned(),
+                            1 => "  1 day ago".to_owned(),
+                            n => format!("{: >3} days ago", n)
+                        };
+                        let delta = days - (task.frequency_days as i64);
+                        let status = match delta
+                        {
+                            delta if delta < 0 => format!("(Due in {} days)", -delta),
+                            delta if delta == 0 => format!("(Due today)"),
+                            delta => format!("({} days overdue!)", delta)
+                        };
+                        println!("{: <20} {: <16} {: <16} {}", task.name, datestring, days_ago_text, status);
+                    },
+                    None => println!("{: <20} {: <16}", task.name, "Never")
+                }
             }
         }
     }
