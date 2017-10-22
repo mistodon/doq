@@ -160,11 +160,21 @@ fn main()
                     )
             )
         .subcommand(
+            SubCommand::with_name("remove")
+                .about("Stop tracking a task")
+                .arg(
+                    Arg::with_name("name")
+                        .help("The name of the task to remove")
+                        .takes_value(true)
+                        .required(true)
+                    )
+            )
+        .subcommand(
             SubCommand::with_name("did")
                 .about("Mark a task as done")
                 .arg(
                     Arg::with_name("task")
-                        .help("The name of the task to mark done")
+                        .help("The name of the task to mark done. Fuzzily matched.")
                         .takes_value(true)
                         .required(true)
                     )
@@ -222,6 +232,14 @@ fn main()
             schedule.tasks.push(Task::new(name, freq, date));
             write_file(schedule_file, &schedule);
         },
+
+        ("remove", Some(matches)) =>
+        {
+            let name = matches.value_of("name").unwrap();
+            let index = schedule.tasks.iter().position(|t| t.name == name).or_fail("No task with that name");
+            schedule.tasks.swap_remove(index);
+            write_file(schedule_file, &schedule);
+        }
 
         ("did", Some(matches)) =>
         {
