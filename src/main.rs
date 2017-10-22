@@ -146,6 +146,22 @@ fn main()
                         .help("Set if the task was done today")
                         .long("done")
                     )
+            )
+        .subcommand(
+            SubCommand::with_name("did")
+                .about("Mark a task as done")
+                .arg(
+                    Arg::with_name("task")
+                        .help("The name of the task to mark done")
+                        .takes_value(true)
+                        .required(true)
+                    )
+                .arg(
+                    Arg::with_name("on")
+                        .help("Specify the date of completion")
+                        .long("on")
+                        .takes_value(true)
+                    )
             );
 
     let matches = app.get_matches();
@@ -188,6 +204,23 @@ fn main()
             schedule.tasks.push(Task::new(name, date));
             write_file(schedule_file, &schedule);
         },
+        ("did", Some(matches)) =>
+        {
+            use std::str::FromStr;
+
+            let name = matches.value_of("task").unwrap();
+            let date = match matches.value_of("on")
+            {
+                Some(date) => NaiveDate::from_str(date).or_fail("Invalid date format"),
+                None => Utc::today().naive_utc()
+            };
+
+            {
+                let mut task = schedule.tasks.iter_mut().find(|t| t.name == name).or_fail("No task with that name");
+                task.set_last_completed(date);
+            }
+            write_file(schedule_file, &schedule);
+        }
         _ =>
         {
             println!("{: <20} {: <16}", "Task", "Last completed");
@@ -198,8 +231,8 @@ fn main()
                 {
                     Some(date) =>
                     {
-                        let days = date.signed_duration_since(Utc::today().naive_utc()).num_days();
-                        (date.to_string(), format!("{} days ago", days))
+                        let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
+                        (date.to_string(), format!("{: >3} days ago", days))
                     }
                     None => ("Never".to_owned(), "".to_owned())
                 };
