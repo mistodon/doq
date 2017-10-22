@@ -126,9 +126,9 @@ fn main()
 {
     use clap::{App, SubCommand, Arg};
 
-    let app = App::new("clap")
+    let app = App::new("clockq")
         .version(env!("CARGO_PKG_VERSION"))
-        .about("MISSING ABOUT DESCRIPTION!!!")
+        .about("Tool for tracking tasks which need done regularly.")
         .arg(
             Arg::with_name("file")
                 .help("The schedule file to read and write from. Defaults to the file specified in ~/.clockq")
