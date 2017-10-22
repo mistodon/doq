@@ -1,3 +1,4 @@
+extern crate ansi_term;
 extern crate chrono;
 extern crate clap;
 extern crate close_enough;
@@ -10,6 +11,7 @@ extern crate serde_yaml;
 
 
 use std::path::{ Path, PathBuf };
+use ansi_term::Color;
 use chrono::{ Utc, NaiveDate };
 use serde::{ Serialize, Deserialize };
 
@@ -239,31 +241,57 @@ fn main()
         {
             println!("{: <20} {: <16}", "Task", "Last completed");
             println!("{: <20} {: <16}", "===", "===");
-            for task in schedule.tasks.iter()
+
+            let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
+                |task| match task.last_completed()
+                {
+                    Some(date) =>
+                    {
+                        let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
+                        let delta = days - (task.frequency_days as i64);
+                        (delta, task)
+                    },
+                    None => (std::i64::MAX, task)
+                }).collect();
+            delta_tasks.sort_by_key(|&(delta, _)| -delta);
+
+            let red = Color::Fixed(9);
+            let green = Color::Fixed(10);
+            let yellow = Color::Fixed(11);
+
+            for &(delta, task) in &delta_tasks
             {
-                match task.last_completed()
+                let (line, color) = match task.last_completed()
                 {
                     Some(date) =>
                     {
                         let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
                         let datestring = date.to_string();
+
                         let days_ago_text = match days
                         {
                             0 => "    Today".to_owned(),
                             1 => "  1 day ago".to_owned(),
                             n => format!("{: >3} days ago", n)
                         };
-                        let delta = days - (task.frequency_days as i64);
-                        let status = match delta
+
+                        let (color, status) = match delta
                         {
-                            delta if delta < 0 => format!("(Due in {} days)", -delta),
-                            delta if delta == 0 => format!("(Due today)"),
-                            delta => format!("({} days overdue!)", delta)
+                            delta if delta < 0 =>
+                                (green, format!("(Due in {} days)", -delta)),
+                            delta if delta == 0 =>
+                                (yellow, format!("(Due today)")),
+                            delta =>
+                                (red, format!("({} days overdue!)", delta))
                         };
-                        println!("{: <20} {: <16} {: <16} {}", task.name, datestring, days_ago_text, status);
+
+                        let line = format!("{: <20} {: <16} {: <16} {}", task.name, datestring, days_ago_text, status);
+                        (line, color)
                     },
-                    None => println!("{: <20} {: <16}", task.name, "Never")
-                }
+                    None => (format!("{: <20} {: <16}", task.name, "Never"), red)
+                };
+
+                println!("{}", color.paint(line));
             }
         }
     }
