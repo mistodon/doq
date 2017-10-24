@@ -294,8 +294,8 @@ fn main()
 
     {
         // TODO: Stretch column sizes to fit max item
-        println!("{: <20}        {: <16}", "Task", "Last completed");
-        println!("{: <20}        {: <16}", "===", "===");
+        println!("{: <20}      {: <16}", "Task", "Last completed");
+        println!("{: <20}      {: <16}", "===", "===");
 
         let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
             |task| match task.last_completed()
@@ -316,7 +316,7 @@ fn main()
 
         for &(delta, task) in &delta_tasks
         {
-            let freq_string = format!("({}d)", task.frequency_days);
+            let freq_string = format!("{}d", task.frequency_days);
 
             let (line, color) = match task.last_completed()
             {
@@ -342,10 +342,10 @@ fn main()
                                 (red, format!("({} days overdue!)", delta))
                     };
 
-                    let line = format!("{: <20} {: >5}  {: <16} {: <16} {}", task.name, freq_string, datestring, days_ago_text, status);
+                    let line = format!("{: <20} {: >3}  {: <16} {: <16} {}", task.name, freq_string, datestring, days_ago_text, status);
                     (line, color)
                 },
-                None => (format!("{: <20} {: >5}  {: <16}", task.name, freq_string, "Never"), red)
+                None => (format!("{: <20} {: >3}  {: <16}", task.name, freq_string, "Never"), red)
             };
 
             println!("{}", color.paint(line));
