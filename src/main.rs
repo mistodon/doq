@@ -62,32 +62,27 @@ struct Task
 {
     pub name: String,
     pub frequency_days: u64,
-    last_completed: Option<String>
+    pub last_completed: Option<Date>
 }
 
-impl Task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Date(String);
+
+impl From<NaiveDate> for Date
 {
-    pub fn new(name: &str, frequency_days: u64, last_completed: Option<NaiveDate>) -> Self
+    fn from(date: NaiveDate) -> Date
     {
-        let mut task = Task { name: name.to_owned(), frequency_days, last_completed: None };
-        if let Some(date) = last_completed
-        {
-            task.set_last_completed(date);
-        }
-        task
+        Date(format!("{}", date))
     }
+}
 
-    pub fn set_last_completed(&mut self, date: NaiveDate)
-    {
-        let datestring = format!("{}", date);
-        self.last_completed = Some(datestring);
-    }
-
-    pub fn last_completed(&self) -> Option<NaiveDate>
+impl From<Date> for NaiveDate
+{
+    fn from(date: Date) -> NaiveDate
     {
         use std::str::FromStr;
 
-        self.last_completed.as_ref().map(|s| NaiveDate::from_str(s).or_fail("Failed to parse date"))
+        NaiveDate::from_str(&date.0).or_fail("Failed to parse date")
     }
 }
 
@@ -198,14 +193,22 @@ fn main()
         {
             Some(file) => PathBuf::from(file),
             None => {
-                let home = std::env::home_dir().or_fail("Failed to find home directory");
-                let dotfile_path: PathBuf = [home.as_path(), ".doq".as_ref()].iter().collect();
-                let default_schedule_path: PathBuf = [home.as_path(), ".doq_schedule".as_ref()].iter().collect();
+                #[cfg(debug_assertions)]
+                {
+                    PathBuf::from(".doq_schedule")
+                }
 
-                ensure_file_exists(&dotfile_path, &AppConfig { schedule_file: default_schedule_path });
-                let config: AppConfig = read_file(&dotfile_path);
+                #[cfg(not(debug_assertions))]
+                {
+                    let home = std::env::home_dir().or_fail("Failed to find home directory");
+                    let dotfile_path: PathBuf = [home.as_path(), ".doq".as_ref()].iter().collect();
+                    let default_schedule_path: PathBuf = [home.as_path(), ".doq_schedule".as_ref()].iter().collect();
 
-                PathBuf::from(config.schedule_file)
+                    ensure_file_exists(&dotfile_path, &AppConfig { schedule_file: default_schedule_path });
+                    let config: AppConfig = read_file(&dotfile_path);
+
+                    PathBuf::from(config.schedule_file)
+                }
             }
         }
     };
@@ -229,7 +232,14 @@ fn main()
 
             let date = if done { Some(Utc::today().naive_utc()) } else { None };
 
-            schedule.tasks.push(Task::new(name, freq, date));
+            schedule.tasks.push(
+                Task
+                {
+                    name: name.to_owned(),
+                    frequency_days: freq,
+                    last_completed: date.map(From::from)
+                });
+
             write_file(schedule_file, &schedule);
         },
 
@@ -273,7 +283,7 @@ fn main()
           
                 if proceed
                 {
-                    task.set_last_completed(date);
+                    task.last_completed = Some(date.into());
                     true
                 }
                 else
@@ -298,15 +308,17 @@ fn main()
         println!("{: <20}      {: <16}", "===", "===");
 
         let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
-            |task| match task.last_completed()
+            |task| match &task.last_completed
             {
-                Some(date) =>
+                &Some(ref date) =>
                 {
+                    // TODO: Get rid of this clone, geez
+                    let date = date.clone().into();
                     let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
                     let delta = days - (task.frequency_days as i64);
                     (delta, task)
                 },
-                None => (std::i64::MAX, task)
+                &None => (std::i64::MAX, task)
             }).collect();
         delta_tasks.sort_by_key(|&(delta, _)| -delta);
 
@@ -318,10 +330,12 @@ fn main()
         {
             let freq_string = format!("{}d", task.frequency_days);
 
-            let (line, color) = match task.last_completed()
+            let (line, color) = match &task.last_completed
             {
-                Some(date) =>
+                &Some(ref date) =>
                 {
+                    // TODO: This one too, urgh
+                    let date = date.clone().into();
                     let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
                     let datestring = date.to_string();
 
@@ -345,7 +359,7 @@ fn main()
                     let line = format!("{: <20} {: >3}  {: <16} {: <16} {}", task.name, freq_string, datestring, days_ago_text, status);
                     (line, color)
                 },
-                None => (format!("{: <20} {: >3}  {: <16}", task.name, freq_string, "Never"), red)
+                &None => (format!("{: <20} {: >3}  {: <16}", task.name, freq_string, "Never"), red)
             };
 
             println!("{}", color.paint(line));
