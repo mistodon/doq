@@ -12,7 +12,7 @@ extern crate serde_yaml;
 
 use std::path::{ Path, PathBuf };
 use ansi_term::Color;
-use chrono::{ Utc, NaiveDate };
+use chrono::{ Utc, NaiveDate, Duration };
 use serde::{ Serialize, Deserialize };
 
 
@@ -61,8 +61,18 @@ struct Schedule
 struct Task
 {
     pub name: String,
-    pub frequency_days: u64,
-    pub last_completed: Option<Date>
+    pub date_completed: Option<Date>,
+    pub date_due: Option<Date>,
+    pub repeat: Repeat
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+enum Repeat
+{
+    Never,
+    Days(u32),
+    Months(u32),
+    Years(u32)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,7 +232,7 @@ fn main()
         ("add", Some(matches)) =>
         {
             let name = matches.value_of("name").unwrap();
-            let freq: u64 = matches.value_of("frequency").unwrap().parse().or_fail("Frequency must be a number of days");
+            let freq: u32 = matches.value_of("frequency").unwrap().parse().or_fail("Frequency must be a number of days");
             let done = matches.is_present("done");
 
             if schedule.tasks.iter().find(|t| t.name == name).is_some()
@@ -230,14 +240,22 @@ fn main()
                 fail("Task already exists");
             }
 
-            let date = if done { Some(Utc::today().naive_utc()) } else { None };
+            let date_completed = if done { Some(Utc::today().naive_utc()) } else { None };
+            let date_due = match date_completed
+            {
+                Some(date) => {
+                    date.checked_add_signed(Duration::days(freq as i64))
+                },
+                None => Some(Utc::today().naive_utc())
+            };
 
             schedule.tasks.push(
                 Task
                 {
                     name: name.to_owned(),
-                    frequency_days: freq,
-                    last_completed: date.map(From::from)
+                    repeat: Repeat::Days(freq),
+                    date_completed: date_completed.map(From::from),
+                    date_due: date_due.map(From::from)
                 });
 
             write_file(schedule_file, &schedule);
@@ -283,7 +301,7 @@ fn main()
           
                 if proceed
                 {
-                    task.last_completed = Some(date.into());
+                    task.date_completed = Some(date.into());
                     true
                 }
                 else
@@ -308,14 +326,18 @@ fn main()
         println!("{: <20}      {: <16}", "===", "===");
 
         let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
-            |task| match &task.last_completed
+            |task| match &task.date_completed
             {
                 &Some(ref date) =>
                 {
                     // TODO: Get rid of this clone, geez
                     let date = date.clone().into();
                     let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
-                    let delta = days - (task.frequency_days as i64);
+                    let delta = match task.repeat
+                    {
+                        Repeat::Days(frequency_days) => days - (frequency_days as i64),
+                        _ => unimplemented!()
+                    };
                     (delta, task)
                 },
                 &None => (std::i64::MAX, task)
@@ -328,9 +350,14 @@ fn main()
 
         for &(delta, task) in &delta_tasks
         {
-            let freq_string = format!("{}d", task.frequency_days);
+//             let freq_string = format!("{}d", task.frequency_days);
+            let freq_string = match task.repeat
+            {
+                Repeat::Days(days) => format!("{}d", days),
+                _ => unimplemented!()
+            };
 
-            let (line, color) = match &task.last_completed
+            let (line, color) = match &task.date_completed
             {
                 &Some(ref date) =>
                 {
