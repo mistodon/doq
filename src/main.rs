@@ -1,5 +1,4 @@
 extern crate ansi_term;
-extern crate chrono;
 extern crate clap;
 extern crate close_enough;
 extern crate serde;
@@ -10,10 +9,13 @@ extern crate serde_derive;
 extern crate serde_yaml;
 
 
+extern crate doq;
+
+
 use std::path::{ Path, PathBuf };
 use ansi_term::Color;
-use chrono::{ Utc, NaiveDate, Duration };
 use serde::{ Serialize, Deserialize };
+use doq::data::*;
 
 
 fn fail(message: &str) -> !
@@ -45,56 +47,13 @@ impl<T> OrFail<T> for Option<T>
 }
 
 
+
 #[derive(Debug, Serialize, Deserialize)]
 struct AppConfig
 {
     pub schedule_file: PathBuf
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct Schedule
-{
-    pub tasks: Vec<Task>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Task
-{
-    pub name: String,
-    pub date_completed: Option<Date>,
-    pub date_due: Option<Date>,
-    pub repeat: Repeat
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-enum Repeat
-{
-    Never,
-    Days(u32),
-    Months(u32),
-    Years(u32)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Date(String);
-
-impl From<NaiveDate> for Date
-{
-    fn from(date: NaiveDate) -> Date
-    {
-        Date(format!("{}", date))
-    }
-}
-
-impl From<Date> for NaiveDate
-{
-    fn from(date: Date) -> NaiveDate
-    {
-        use std::str::FromStr;
-
-        NaiveDate::from_str(&date.0).or_fail("Failed to parse date")
-    }
-}
 
 
 fn ensure_file_exists<T: Serialize>(path: &Path, default_content: &T)
@@ -244,9 +203,9 @@ fn main()
             let date_due = match date_completed
             {
                 Some(date) => {
-                    date.checked_add_signed(Duration::days(freq as i64))
+                    date + Duration::days(freq as i64)
                 },
-                None => Some(Utc::today().naive_utc())
+                None => Utc::today().naive_utc()
             };
 
             schedule.tasks.push(
@@ -255,7 +214,7 @@ fn main()
                     name: name.to_owned(),
                     repeat: Repeat::Days(freq),
                     date_completed: date_completed.map(From::from),
-                    date_due: date_due.map(From::from)
+                    date_due: date_due.into()
                 });
 
             write_file(schedule_file, &schedule);
@@ -301,7 +260,11 @@ fn main()
           
                 if proceed
                 {
-                    task.date_completed = Some(date.into());
+                    let date_completed = date;
+                    let previous_date_due = task.date_due.as_naive().or_fail("Failed to parse date");
+                    let next_due_date = doq::next_due_date(previous_date_due, date_completed, task.repeat);
+                    task.date_completed = Some(date_completed.into());
+                    task.date_due = next_due_date.expect("TODO: delete this task").into();
                     true
                 }
                 else
@@ -326,21 +289,12 @@ fn main()
         println!("{: <20}      {: <16}", "===", "===");
 
         let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
-            |task| match &task.date_completed
+            |task| 
             {
-                &Some(ref date) =>
-                {
-                    // TODO: Get rid of this clone, geez
-                    let date = date.clone().into();
-                    let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
-                    let delta = match task.repeat
-                    {
-                        Repeat::Days(frequency_days) => days - (frequency_days as i64),
-                        _ => unimplemented!()
-                    };
-                    (delta, task)
-                },
-                &None => (std::i64::MAX, task)
+                let date_due = task.date_due.as_naive().or_fail("Failed to parse date");
+                let today = Utc::today().naive_utc();
+                let delta = doq::days_until_due(date_due, today);
+                (delta, task)
             }).collect();
         delta_tasks.sort_by_key(|&(delta, _)| -delta);
 
@@ -350,7 +304,6 @@ fn main()
 
         for &(delta, task) in &delta_tasks
         {
-//             let freq_string = format!("{}d", task.frequency_days);
             let freq_string = match task.repeat
             {
                 Repeat::Days(days) => format!("{}d", days),
@@ -361,8 +314,7 @@ fn main()
             {
                 &Some(ref date) =>
                 {
-                    // TODO: This one too, urgh
-                    let date = date.clone().into();
+                    let date = date.as_naive().or_fail("Failed to parse date");
                     let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
                     let datestring = date.to_string();
 
@@ -375,12 +327,12 @@ fn main()
 
                     let (color, status) = match delta
                     {
-                        delta if delta < 0 =>
-                            (green, format!("(Due in {} days)", -delta)),
+                        delta if delta > 0 =>
+                            (green, format!("(Due in {} days)", delta)),
                             delta if delta == 0 =>
                                 (yellow, format!("(Due today)")),
                             delta =>
-                                (red, format!("({} days overdue!)", delta))
+                                (red, format!("({} days overdue!)", -delta))
                     };
 
                     let line = format!("{: <20} {: >3}  {: <16} {: <16} {}", task.name, freq_string, datestring, days_ago_text, status);
