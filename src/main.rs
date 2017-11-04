@@ -90,6 +90,10 @@ fn main()
 {
     use clap::{App, SubCommand, Arg};
 
+    // TODO: Add fixed/fluid option for tasks (every 7 days, or at least every 7) (--at-least?)
+    // TODO: Add validator for --repeat option
+    // TODO: Add edit subcommand (like add, but fuzzy-matched and keeps unspecified options)
+    // TODO: Add flags to limit what is shown in schedule
     let app = App::new("doq")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Tool for tracking tasks which need done regularly.")
