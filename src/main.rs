@@ -194,6 +194,7 @@ fn main()
             let name = matches.value_of("name").unwrap();
             let repeat = {
                 let value = matches.value_of("repeat").unwrap();
+
                 if value == "never"
                 {
                     Repeat::Never
@@ -202,6 +203,7 @@ fn main()
                 {
                     let (count, unit) = value.split_at(value.len() - 1);
                     let count: u32 = count.parse().or_fail("Expected a number");
+
                     match unit
                     {
                         "d" => Repeat::Days(count),
@@ -257,8 +259,9 @@ fn main()
             };
             let yes = matches.is_present("yes");
 
-            let should_write = {
-                let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
+            let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
+
+            let (should_write, should_delete) = {
                 let task = schedule.tasks.iter_mut().find(|t| t.name == task_name).unwrap();
 
                 let proceed = match yes
@@ -274,36 +277,50 @@ fn main()
                         (command == "y" || command == "yes")
                     }
                 };
-          
+
                 if proceed
                 {
                     let date_completed = date;
                     let previous_date_due = task.date_due.as_naive().or_fail("Failed to parse date");
                     let next_due_date = doq::next_due_date(previous_date_due, date_completed, task.repeat);
-                    task.date_completed = Some(date_completed.into());
-                    task.date_due = next_due_date.expect("TODO: delete this task").into();
-                    true
+                    let should_delete = match next_due_date
+                    {
+                        Some(next_due_date) => {
+                            task.date_completed = Some(date_completed.into());
+                            task.date_due = next_due_date.into();
+                            false
+                        },
+                        None => true
+                    };
+
+                    (true, should_delete)
                 }
                 else
                 {
                     eprintln!("Cancelling");
-                    false
+                    (false, false)
                 }
             };
+
+            if should_delete
+            {
+                // TODO: Remove DRY fail with remove command.
+                let index = schedule.tasks.iter().position(|t| t.name == task_name).unwrap();
+                schedule.tasks.swap_remove(index);
+            }
 
             if should_write
             {
                 write_file(schedule_file, &schedule);
             }
         },
-        
         _ => ()
     }
 
     {
         // TODO: Stretch column sizes to fit max item
-        println!("{: <20}      {: <16}", "Task", "Last completed");
-        println!("{: <20}      {: <16}", "===", "===");
+        println!("{: <20}      {: <33} {: <33}", "Task", "Last completed", "Due on");
+        println!("{: <20}      {: <33} {: <33}", "===", "===", "===");
 
         let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
             |task| 
@@ -329,14 +346,12 @@ fn main()
                 Repeat::Never => "--".to_owned()
             };
 
-            let (line, color) = match &task.date_completed
+            let (datestring, days_ago_text) = match &task.date_completed
             {
                 &Some(ref date) =>
                 {
                     let date = date.as_naive().or_fail("Failed to parse date");
                     let days = Utc::today().naive_utc().signed_duration_since(date).num_days();
-                    let datestring = date.to_string();
-
                     let days_ago_text = match days
                     {
                         0 => "    Today".to_owned(),
@@ -344,21 +359,21 @@ fn main()
                         n => format!("{: >3} days ago", n)
                     };
 
-                    let (color, status) = match delta
-                    {
-                        delta if delta > 0 =>
-                            (green, format!("(Due in {} days)", delta)),
-                            delta if delta == 0 =>
-                                (yellow, format!("(Due today)")),
-                            delta =>
-                                (red, format!("({} days overdue!)", -delta))
-                    };
-
-                    let line = format!("{: <20} {: >3}  {: <16} {: <16} {}", task.name, freq_string, datestring, days_ago_text, status);
-                    (line, color)
+                    (date.to_string(), days_ago_text)
                 },
-                &None => (format!("{: <20} {: >3}  {: <16}", task.name, freq_string, "Never"), red)
+                &None => ("Never".to_owned(), "".to_owned())
             };
+
+            let due_date_string = task.date_due.as_naive().or_fail("Failed to parse date").to_string();
+
+            let (color, status) = match delta
+            {
+                delta if delta > 0 => (green, format!("(Due in {} days)", delta)),
+                delta if delta == 0 => (yellow, format!("(Due today)")),
+                delta => (red, format!("({} days overdue!)", -delta))
+            };
+
+            let line = format!("{: <20} {: >3}  {: <16} {: <16} {: <16} {: <16}", task.name, freq_string, datestring, days_ago_text, due_date_string, status);
 
             println!("{}", color.paint(line));
         }
