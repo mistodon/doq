@@ -110,17 +110,18 @@ fn main()
                         .required(true)
                     )
                 .arg(
-                    Arg::with_name("frequency")
-                        .help("How frequently this task should be done in days")
-                        .short("f")
-                        .long("frequency")
+                    Arg::with_name("on")
+                        .help("The date this task is due to be completed on")
                         .takes_value(true)
-                        .required(true)
+                        .long("on")
                     )
                 .arg(
-                    Arg::with_name("done")
-                        .help("Set if the task was done today")
-                        .long("done")
+                    Arg::with_name("repeat")
+                        .help("How frequently this task should repeat")
+                        .short("r")
+                        .long("repeat")
+                        .takes_value(true)
+                        .required(true)
                     )
             )
         .subcommand(
@@ -191,20 +192,36 @@ fn main()
         ("add", Some(matches)) =>
         {
             let name = matches.value_of("name").unwrap();
-            let freq: u32 = matches.value_of("frequency").unwrap().parse().or_fail("Frequency must be a number of days");
-            let done = matches.is_present("done");
+            let repeat = {
+                let value = matches.value_of("repeat").unwrap();
+                if value == "never"
+                {
+                    Repeat::Never
+                }
+                else
+                {
+                    let (count, unit) = value.split_at(value.len() - 1);
+                    let count: u32 = count.parse().or_fail("Expected a number");
+                    match unit
+                    {
+                        "d" => Repeat::Days(count),
+                        "m" => Repeat::Months(count),
+                        "y" => Repeat::Years(count),
+                        _ => fail("Expected a suffix (d, m, y) for days, months, or years")
+                    }
+                }
+            };
 
             if schedule.tasks.iter().find(|t| t.name == name).is_some()
             {
                 fail("Task already exists");
             }
 
-            let date_completed = if done { Some(Utc::today().naive_utc()) } else { None };
-            let date_due = match date_completed
+            use std::str::FromStr;
+
+            let date_due = match matches.value_of("on")
             {
-                Some(date) => {
-                    date + Duration::days(freq as i64)
-                },
+                Some(date) => NaiveDate::from_str(date).or_fail("Invalid date format"),
                 None => Utc::today().naive_utc()
             };
 
@@ -212,8 +229,8 @@ fn main()
                 Task
                 {
                     name: name.to_owned(),
-                    repeat: Repeat::Days(freq),
-                    date_completed: date_completed.map(From::from),
+                    repeat,
+                    date_completed: None,
                     date_due: date_due.into()
                 });
 
@@ -307,7 +324,9 @@ fn main()
             let freq_string = match task.repeat
             {
                 Repeat::Days(days) => format!("{}d", days),
-                _ => unimplemented!()
+                Repeat::Months(months) => format!("{}m", months),
+                Repeat::Years(years) => format!("{}y", years),
+                Repeat::Never => "--".to_owned()
             };
 
             let (line, color) = match &task.date_completed
