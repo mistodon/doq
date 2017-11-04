@@ -313,7 +313,7 @@ fn main()
                 let delta = doq::days_until_due(date_due, today);
                 (delta, task)
             }).collect();
-        delta_tasks.sort_by_key(|&(delta, _)| -delta);
+        delta_tasks.sort_by_key(|&(delta, _)| delta);
 
         let red = Color::Fixed(9);
         let green = Color::Fixed(10);
