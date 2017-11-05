@@ -88,15 +88,15 @@ fn write_file<T: Serialize>(path: &Path, data: &T)
 
 fn main()
 {
-    use clap::{App, SubCommand, Arg};
+    use clap::{App, SubCommand, Arg, AppSettings};
 
-    // TODO: Add fixed/fluid option for tasks (every 7 days, or at least every 7) (--at-least?)
     // TODO: Add validator for --repeat option
     // TODO: Add edit subcommand (like add, but fuzzy-matched and keeps unspecified options)
     // TODO: Add flags to limit what is shown in schedule
     let app = App::new("doq")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Tool for tracking tasks which need done regularly.")
+        .settings(&[AppSettings::VersionlessSubcommands])
         .arg(
             Arg::with_name("file")
                 .help("The schedule file to read and write from. Defaults to the file specified in ~/.doq")
@@ -104,6 +104,7 @@ fn main()
                 .short("f")
                 .takes_value(true)
             )
+
         .subcommand(
             SubCommand::with_name("add")
                 .about("Add a task to track")
@@ -127,7 +128,13 @@ fn main()
                         .takes_value(true)
                         .required(true)
                     )
+                .arg(
+                    Arg::with_name("at_least")
+                        .help("Specify that the repeat period is relative to completion date rather than due date")
+                        .long("at-least")
+                    )
             )
+
         .subcommand(
             SubCommand::with_name("remove")
                 .about("Stop tracking a task")
@@ -138,6 +145,7 @@ fn main()
                         .required(true)
                     )
             )
+
         .subcommand(
             SubCommand::with_name("did")
                 .about("Mark a task as done")
@@ -218,6 +226,13 @@ fn main()
                 }
             };
 
+            let at_least = matches.is_present("at_least");
+
+            if repeat == Repeat::Never && at_least
+            {
+                fail("Cannot specify --at-least and --repeat never");
+            }
+
             if schedule.tasks.iter().find(|t| t.name == name).is_some()
             {
                 fail("Task already exists");
@@ -237,7 +252,8 @@ fn main()
                     name: name.to_owned(),
                     repeat,
                     date_completed: None,
-                    date_due: date_due.into()
+                    date_due: date_due.into(),
+                    at_least
                 });
 
             write_file(schedule_file, &schedule);
@@ -286,7 +302,8 @@ fn main()
                 {
                     let date_completed = date;
                     let previous_date_due = task.date_due.as_naive().or_fail("Failed to parse date");
-                    let next_due_date = doq::next_due_date(previous_date_due, date_completed, task.repeat);
+                    let repeat_start = if task.at_least { date_completed } else { previous_date_due };
+                    let next_due_date = doq::next_due_date(repeat_start, date_completed, task.repeat);
                     let should_delete = match next_due_date
                     {
                         Some(next_due_date) => {
@@ -342,11 +359,13 @@ fn main()
 
         for &(delta, task) in &delta_tasks
         {
+            let leader = if task.at_least { '<' } else { ' ' };
+
             let freq_string = match task.repeat
             {
-                Repeat::Days(days) => format!("{}d", days),
-                Repeat::Months(months) => format!("{}m", months),
-                Repeat::Years(years) => format!("{}y", years),
+                Repeat::Days(days) => format!("{}{}d", leader, days),
+                Repeat::Months(months) => format!("{}{}m", leader, months),
+                Repeat::Years(years) => format!("{}{}y", leader, years),
                 Repeat::Never => "--".to_owned()
             };
 
@@ -383,3 +402,4 @@ fn main()
         }
     }
 }
+

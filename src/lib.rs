@@ -20,10 +20,11 @@ pub mod data
         pub name: String,
         pub date_completed: Option<Date>,
         pub date_due: Date,
-        pub repeat: Repeat
+        pub repeat: Repeat,
+        pub at_least: bool
     }
 
-    #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub enum Repeat
     {
         Never,
