@@ -47,42 +47,10 @@ impl<T> OrFail<T> for Option<T>
 }
 
 
-
 #[derive(Debug, Serialize, Deserialize)]
 struct AppConfig
 {
     pub schedule_file: PathBuf
-}
-
-
-
-fn ensure_file_exists<T: Serialize>(path: &Path, default_content: &T)
-{
-    use std::fs::File;
-
-    if !path.exists()
-    {
-        let file = &mut File::create(path).or_fail("Failed to create file");
-        serde_yaml::to_writer(file, default_content).or_fail("Failed to write to file");
-    }
-}
-
-fn read_file<T>(path: &Path) -> T
-where for <'de>
-    T: Deserialize<'de>
-{
-    use std::fs::File;
-
-    let file = &File::open(path).or_fail("Failed to read file");
-    serde_yaml::from_reader(file).or_fail("Failed to parse file")
-}
-
-fn write_file<T: Serialize>(path: &Path, data: &T)
-{
-    use std::fs::File;
-
-    let file = &mut File::create(path).or_fail("Failed to open file");
-    serde_yaml::to_writer(file, data).or_fail("Failed to write to file");
 }
 
 
@@ -91,6 +59,9 @@ fn main()
     use clap::{App, SubCommand, Arg, AppSettings};
 
     // TODO: Add validator for --repeat option
+    // TODO: Add validator for dates
+    // TODO: Fuzzy matching on all commands
+    // TODO: Confirmation prompt on all destructive actions
     // TODO: Add edit subcommand (like add, but fuzzy-matched and keeps unspecified options)
     // TODO: Add flags to limit what is shown in schedule
     let app = App::new("doq")
@@ -132,6 +103,43 @@ fn main()
                     Arg::with_name("at_least")
                         .help("Specify that the repeat period is relative to completion date rather than due date")
                         .long("at-least")
+                    )
+            )
+
+        .subcommand(
+            SubCommand::with_name("edit")
+                .about("Modify an existing task")
+                .arg(
+                    Arg::with_name("name")
+                        .help("The name of the task to modify. Fuzzily matched.")
+                        .takes_value(true)
+                        .required(true)
+                    )
+                .arg(
+                    Arg::with_name("rename")
+                        .help("New name for the task")
+                        .takes_value(true)
+                        .long("rename")
+                    )
+                .arg(
+                    Arg::with_name("on")
+                        .help("New due-date of the task")
+                        .takes_value(true)
+                        .long("on")
+                    )
+                .arg(
+                    Arg::with_name("repeat")
+                        .help("How frequently this task should now repeat")
+                        .short("r")
+                        .long("repeat")
+                        .takes_value(true)
+                    )
+                .arg(
+                    Arg::with_name("at_least")
+                        .help("Whether or not this task repeats relative to completion date rather than due date")
+                        .long("at-least")
+                        .takes_value(true)
+                        .possible_values(&["true", "false"])
                     )
             )
 
@@ -238,13 +246,7 @@ fn main()
                 fail("Task already exists");
             }
 
-            use std::str::FromStr;
-
-            let date_due = match matches.value_of("on")
-            {
-                Some(date) => NaiveDate::from_str(date).or_fail("Invalid date format"),
-                None => Utc::today().naive_utc()
-            };
+            let date_due = parse_date_or_today(matches.value_of("on"));
 
             schedule.tasks.push(
                 Task
@@ -259,6 +261,35 @@ fn main()
             write_file(schedule_file, &schedule);
         },
 
+        ("edit", Some(matches)) =>
+        {
+            let name = matches.value_of("name").unwrap();
+
+            let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
+
+            let task = schedule.tasks.iter_mut().find(|t| t.name == task_name).unwrap();
+
+            if let Some(new_name) = matches.value_of("rename")
+            {
+                task.name = new_name.to_owned();
+            }
+
+            if let Some(on) = matches.value_of("on")
+            {
+                task.date_due = parse_date(on).into();
+            }
+
+            if let Some(repeat) = matches.value_of("repeat")
+            {
+                task.repeat = doq::repeat_from_string(repeat).unwrap_or_else(|e| fail(e)); 
+            }
+
+            if let Some(at_least) = matches.value_of("at_least")
+            {
+                task.at_least = at_least.parse().unwrap();
+            }
+        }
+
         ("remove", Some(matches)) =>
         {
             let name = matches.value_of("name").unwrap();
@@ -269,14 +300,9 @@ fn main()
 
         ("did", Some(matches)) =>
         {
-            use std::str::FromStr;
-
             let name = matches.value_of("task").unwrap();
-            let date = match matches.value_of("on")
-            {
-                Some(date) => NaiveDate::from_str(date).or_fail("Invalid date format"),
-                None => Utc::today().naive_utc()
-            };
+
+            let date = parse_date_or_today(matches.value_of("on"));
             let yes = matches.is_present("yes");
 
             let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
@@ -400,6 +426,52 @@ fn main()
 
             println!("{}", color.paint(line));
         }
+    }
+}
+
+
+fn ensure_file_exists<T: Serialize>(path: &Path, default_content: &T)
+{
+    use std::fs::File;
+
+    if !path.exists()
+    {
+        let file = &mut File::create(path).or_fail("Failed to create file");
+        serde_yaml::to_writer(file, default_content).or_fail("Failed to write to file");
+    }
+}
+
+fn read_file<T>(path: &Path) -> T
+where for <'de>
+    T: Deserialize<'de>
+{
+    use std::fs::File;
+
+    let file = &File::open(path).or_fail("Failed to read file");
+    serde_yaml::from_reader(file).or_fail("Failed to parse file")
+}
+
+fn write_file<T: Serialize>(path: &Path, data: &T)
+{
+    use std::fs::File;
+
+    let file = &mut File::create(path).or_fail("Failed to open file");
+    serde_yaml::to_writer(file, data).or_fail("Failed to write to file");
+}
+
+
+fn parse_date(date: &str) -> NaiveDate
+{
+    use std::str::FromStr;
+    NaiveDate::from_str(date).or_fail("Invalid date format")
+}
+
+fn parse_date_or_today(date: Option<&str>) -> NaiveDate
+{
+    match date
+    {
+        Some(date) => parse_date(date),
+        None => Utc::today().naive_utc()
     }
 }
 

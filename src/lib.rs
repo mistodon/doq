@@ -59,6 +59,34 @@ pub mod data
 use data::*;
 
 
+pub fn repeat_from_string(string: &str) -> Result<Repeat, &'static str>
+{
+    const PARSE_ERROR: &str = "Expected a number";
+    const UNIT_ERROR: &str = "Expected a suffix (d, m, y) for days, months, or years";
+
+    if string == "never"
+    {
+        return Ok(Repeat::Never);
+    }
+
+    let (count, unit) = string.split_at(string.len() - 1);
+    let count: u32 = match count.parse()
+    {
+        Ok(c) => c,
+        Err(_) => return Err(PARSE_ERROR)
+    };
+
+    let repeat = match unit
+    {
+        "d" => Repeat::Days(count),
+        "m" => Repeat::Months(count),
+        "y" => Repeat::Years(count),
+        _ => return Err(UNIT_ERROR)
+    };
+
+    Ok(repeat)
+}
+
 pub fn days_until_due(due_date: NaiveDate, today: NaiveDate) -> i64
 {
     due_date.signed_duration_since(today).num_days() as i64
