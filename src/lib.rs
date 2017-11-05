@@ -8,10 +8,24 @@ pub mod data
 {
     pub use chrono::{ Utc, NaiveDate, Duration };
 
-    #[derive(Debug, Default, Serialize, Deserialize)]
+    #[derive(Debug, Deserialize)]
+    pub struct VersionedSchedule
+    {
+        pub tasks: Vec<VersionedTask>
+    }
+
+    #[derive(Debug, Default, Serialize)]
     pub struct Schedule
     {
         pub tasks: Vec<Task>
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct Task010
+    {
+        pub name: String,
+        pub frequency_days: u32,
+        pub last_completed: Option<Date>
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -22,6 +36,60 @@ pub mod data
         pub date_due: Date,
         pub repeat: Repeat,
         pub at_least: bool
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    pub enum VersionedTask
+    {
+        Current(Task),
+        Version010(Task010)
+    }
+
+    impl VersionedTask
+    {
+        pub fn upversioned(self) -> Option<Task>
+        {
+            match self
+            {
+                VersionedTask::Current(t) => Some(t),
+                VersionedTask::Version010(t) => {
+                    let Task010 { name, frequency_days, last_completed } = t;
+                    let repeat = Repeat::Days(frequency_days);
+                    let (date_completed, date_due) = if let Some(last_completed) = last_completed
+                    {
+                        let completed = last_completed.as_naive();
+
+                        let date_due = match completed
+                        {
+                            Some(date) => super::next_due_date(date, date, repeat),
+                            None => None
+                        };
+
+                        let date_due = match date_due
+                        {
+                            Some(date) => date,
+                            None => return None
+                        };
+
+                        (completed.map(Into::into), date_due.into())
+                    }
+                    else
+                    {
+                        (None, Utc::today().naive_utc().into())
+                    };
+
+                    Some(Task
+                    {
+                        name,
+                        date_completed,
+                        date_due,
+                        repeat,
+                        at_least: false
+                    })
+                }
+            }
+        }
     }
 
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]

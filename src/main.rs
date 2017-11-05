@@ -62,7 +62,6 @@ fn main()
     // TODO: Add validator for dates
     // TODO: Fuzzy matching on all commands
     // TODO: Confirmation prompt on all destructive actions
-    // TODO: Add edit subcommand (like add, but fuzzy-matched and keeps unspecified options)
     // TODO: Add flags to limit what is shown in schedule
     let app = App::new("doq")
         .version(env!("CARGO_PKG_VERSION"))
@@ -205,7 +204,12 @@ fn main()
 
     ensure_file_exists(schedule_file, &Schedule::default());
 
-    let mut schedule: Schedule = read_file(schedule_file);
+    let mut schedule = {
+        let schedule: VersionedSchedule = read_file(schedule_file);
+        let tasks = schedule.tasks.into_iter().map(|task| task.upversioned().or_fail("Failed to upversion old tasks in schedule. You may have to manually recreate it.")).collect();
+
+        Schedule { tasks }
+    };
 
     match matches.subcommand()
     {
@@ -263,31 +267,36 @@ fn main()
 
         ("edit", Some(matches)) =>
         {
-            let name = matches.value_of("name").unwrap();
-
-            let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
-
-            let task = schedule.tasks.iter_mut().find(|t| t.name == task_name).unwrap();
-
-            if let Some(new_name) = matches.value_of("rename")
             {
-                task.name = new_name.to_owned();
+                let name = matches.value_of("name").unwrap();
+
+                // Remove DRY-fail with did command
+                let task_name = close_enough::close_enough(schedule.tasks.iter().map(|t| &t.name), name).or_fail("No task matching that name").to_owned();
+
+                let task = schedule.tasks.iter_mut().find(|t| t.name == task_name).unwrap();
+
+                if let Some(new_name) = matches.value_of("rename")
+                {
+                    task.name = new_name.to_owned();
+                }
+
+                if let Some(on) = matches.value_of("on")
+                {
+                    task.date_due = parse_date(on).into();
+                }
+
+                if let Some(repeat) = matches.value_of("repeat")
+                {
+                    task.repeat = doq::repeat_from_string(repeat).unwrap_or_else(|e| fail(e)); 
+                }
+
+                if let Some(at_least) = matches.value_of("at_least")
+                {
+                    task.at_least = at_least.parse().unwrap();
+                }
             }
 
-            if let Some(on) = matches.value_of("on")
-            {
-                task.date_due = parse_date(on).into();
-            }
-
-            if let Some(repeat) = matches.value_of("repeat")
-            {
-                task.repeat = doq::repeat_from_string(repeat).unwrap_or_else(|e| fail(e)); 
-            }
-
-            if let Some(at_least) = matches.value_of("at_least")
-            {
-                task.at_least = at_least.parse().unwrap();
-            }
+            write_file(schedule_file, &schedule);
         }
 
         ("remove", Some(matches)) =>
@@ -366,8 +375,8 @@ fn main()
 
     {
         // TODO: Stretch column sizes to fit max item
-        println!("{: <20}      {: <33} {: <33}", "Task", "Last completed", "Due on");
-        println!("{: <20}      {: <33} {: <33}", "===", "===", "===");
+        println!("{: <20} {: >4}  {: <33} {: <33}", "Task", "", "Last completed", "Due on");
+        println!("{: <20} {: >4}  {: <33} {: <33}", "===", "", "===", "===");
 
         let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
             |task| 
@@ -422,7 +431,7 @@ fn main()
                 delta => (red, format!("({} days overdue!)", -delta))
             };
 
-            let line = format!("{: <20} {: >3}  {: <16} {: <16} {: <16} {: <16}", task.name, freq_string, datestring, days_ago_text, due_date_string, status);
+            let line = format!("{: <20} {: >4}  {: <16} {: <16} {: <16} {: <16}", task.name, freq_string, datestring, days_ago_text, due_date_string, status);
 
             println!("{}", color.paint(line));
         }
