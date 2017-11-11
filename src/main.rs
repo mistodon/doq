@@ -391,6 +391,7 @@ fn main()
         let red = Color::Fixed(9);
         let green = Color::Fixed(10);
         let yellow = Color::Fixed(11);
+        let white = Color::Fixed(15);
 
         for &(delta, task) in &delta_tasks
         {
@@ -426,9 +427,11 @@ fn main()
 
             let (color, status) = match delta
             {
-                delta if delta > 0 => (green, format!("(Due in {} days)", delta)),
-                delta if delta == 0 => (yellow, format!("(Due today)")),
-                delta => (red, format!("({} days overdue!)", -delta))
+                1 => (white, "(Due tomorrow)".to_owned()),
+                0 => (yellow, "(Due today)".to_owned()),
+                -1 => (red, "(1 day overdue!)".to_owned()),
+                n if n > 0 => (green, format!("(Due in {} days)", n)),
+                n => (red, format!("({} days overdue!)", -n))
             };
 
             let line = format!("{: <20} {: >4}  {: <16} {: <16} {: <16} {: <16}", task.name, freq_string, datestring, days_ago_text, due_date_string, status);
