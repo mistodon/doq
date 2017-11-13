@@ -58,11 +58,13 @@ fn main()
 {
     use clap::{App, SubCommand, Arg, AppSettings};
 
+    // TODO: Change to using `structopt` with Date/Day types like `piggy`
     // TODO: Add validator for --repeat option
     // TODO: Add validator for dates
     // TODO: Fuzzy matching on all commands
     // TODO: Confirmation prompt on all destructive actions
     // TODO: Add flags to limit what is shown in schedule
+    // TODO: Use data format that preserves all history
     let app = App::new("doq")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Tool for tracking tasks which need done regularly.")
