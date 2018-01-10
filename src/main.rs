@@ -2,10 +2,6 @@ extern crate ansi_term;
 extern crate clap;
 extern crate close_enough;
 extern crate serde;
-
-#[macro_use]
-extern crate serde_derive;
-
 extern crate serde_yaml;
 
 
@@ -44,13 +40,6 @@ impl<T> OrFail<T> for Option<T>
     {
         self.unwrap_or_else(|| fail(message))
     }
-}
-
-
-#[derive(Debug, Serialize, Deserialize)]
-struct AppConfig
-{
-    pub schedule_file: PathBuf
 }
 
 
@@ -179,37 +168,32 @@ fn main()
 
     let matches = app.get_matches();
 
-    // TODO: Combine separate .doq/.doq_schedule files
-    // TODO: Search for ./.doq and then ~/.doq
-    let schedule_file = &{
+    let dotfile = &{
         match matches.value_of("file")
         {
             Some(file) => PathBuf::from(file),
             None => {
-                #[cfg(debug_assertions)]
+                let here: &Path = "./.doq".as_ref();
+
+                if here.exists()
                 {
-                    PathBuf::from(".doq_schedule")
+                    here.to_owned()
                 }
-
-                #[cfg(not(debug_assertions))]
+                else
                 {
-                    let home = std::env::home_dir().or_fail("Failed to find home directory");
-                    let dotfile_path: PathBuf = [home.as_path(), ".doq".as_ref()].iter().collect();
-                    let default_schedule_path: PathBuf = [home.as_path(), ".doq_schedule".as_ref()].iter().collect();
-
-                    ensure_file_exists(&dotfile_path, &AppConfig { schedule_file: default_schedule_path });
-                    let config: AppConfig = read_file(&dotfile_path);
-
-                    PathBuf::from(config.schedule_file)
+                    use std::env;
+                    let mut home = env::home_dir().expect("Failed to find home directory");
+                    home.push(".doq");
+                    home
                 }
             }
         }
     };
 
-    ensure_file_exists(schedule_file, &Schedule::default());
+    ensure_file_exists(dotfile, &Schedule::default());
 
     let mut schedule = {
-        let schedule: VersionedSchedule = read_file(schedule_file);
+        let schedule: VersionedSchedule = read_file(dotfile);
         let tasks = schedule.tasks.into_iter().map(|task| task.upversioned().or_fail("Failed to upversion old tasks in schedule. You may have to manually recreate it.")).collect();
 
         Schedule { tasks }
@@ -266,7 +250,7 @@ fn main()
                     at_least
                 });
 
-            write_file(schedule_file, &schedule);
+            write_file(dotfile, &schedule);
         },
 
         ("edit", Some(matches)) =>
@@ -300,7 +284,7 @@ fn main()
                 }
             }
 
-            write_file(schedule_file, &schedule);
+            write_file(dotfile, &schedule);
         }
 
         ("remove", Some(matches)) =>
@@ -308,7 +292,7 @@ fn main()
             let name = matches.value_of("name").unwrap();
             let index = schedule.tasks.iter().position(|t| t.name == name).or_fail("No task with that name");
             schedule.tasks.swap_remove(index);
-            write_file(schedule_file, &schedule);
+            write_file(dotfile, &schedule);
         }
 
         ("did", Some(matches)) =>
@@ -371,7 +355,7 @@ fn main()
 
             if should_write
             {
-                write_file(schedule_file, &schedule);
+                write_file(dotfile, &schedule);
             }
         },
         _ => ()
