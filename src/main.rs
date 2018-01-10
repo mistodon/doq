@@ -179,6 +179,8 @@ fn main()
 
     let matches = app.get_matches();
 
+    // TODO: Combine separate .doq/.doq_schedule files
+    // TODO: Search for ./.doq and then ~/.doq
     let schedule_file = &{
         match matches.value_of("file")
         {
@@ -289,7 +291,7 @@ fn main()
 
                 if let Some(repeat) = matches.value_of("repeat")
                 {
-                    task.repeat = doq::repeat_from_string(repeat).unwrap_or_else(|e| fail(e)); 
+                    task.repeat = doq::repeat_from_string(repeat).unwrap_or_else(|e| fail(e));
                 }
 
                 if let Some(at_least) = matches.value_of("at_least")
@@ -381,7 +383,7 @@ fn main()
         println!("{: <20} {: >4}  {: <33} {: <33}", "===", "", "===", "===");
 
         let mut delta_tasks: Vec<_> = schedule.tasks.iter().map(
-            |task| 
+            |task|
             {
                 let date_due = task.date_due.as_naive().or_fail("Failed to parse date");
                 let today = Utc::today().naive_utc();
