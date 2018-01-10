@@ -9,13 +9,14 @@ readme = "README.md"
 license = "WTFPL"
 
 [dependencies]
-ansi_term = "~0.10.0"
+ansi_term = "~0.10.2"
 chrono = "~0.4.0"
-clap = "~2.26.0"
-serde = "~1.0.0"
-serde_derive = "~1.0.0"
-serde_yaml = "~0.7.0"
+clap = "~2.29.1"
+serde = "~1.0.27"
+serde_derive = "~1.0.27"
+serde_yaml = "~0.7.3"
 
 [dependencies.close_enough]
 default-features = false
-version = "~0.2.0"
+version = "~0.2.1"
+
