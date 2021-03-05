@@ -1,5 +1,5 @@
 [package]
-authors = ["Pirh <***redacted.email@redacted.nope***>"]
+authors = ["Vi <violet@hey.com>"]
 name = "doq"
 version = "0.1.1"
 description = "A tool for tracking tasks which need done regularly."
